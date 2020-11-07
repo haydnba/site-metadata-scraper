@@ -1,5 +1,5 @@
 import { Browser, Page, launch as browserLaunch } from 'puppeteer'
-import { data } from './urls.json'
+import { data } from '../.snippets/urls.json'
 
 // Select just a small subset of the provided urls (should batch process...)
 const urls: string[] = data.map((url: string) => new URL(url).origin).slice(5, 15)
@@ -134,7 +134,7 @@ const scrape = async (list: string[]) => await Promise.all(list.map(async (url: 
   })
 
   // Close the browser instance
-  // await browser.close()
+  await browser.close()
 
   // Write out the data - could be serialised as JSON...
   console.log({
