@@ -1,68 +1,157 @@
-import SomeClass from './someModule'
+import { Browser, Page, launch as browserLaunch } from 'puppeteer'
+import { data } from './urls.json'
 
-// Arrays are annotated as show here
-const someData: number[] = [1, 2, 3, 4, 5]
+// Select just a small subset of the provided urls (should batch process...)
+const urls: string[] = data.map((url: string) => new URL(url).origin).slice(5, 15)
 
-// Access the static `world` property
-const world = SomeClass.world
-
-// Type alias for function accepting and returning `string`
-// `input` is optional since we provide a default parameter
-type someFunc = (input?: string) => string
-
-/**
- * Function implements the `someFunc` type
- *
- * @param word A word to print
- */
-const hello: someFunc = (word: string = world): string => {
-  return `Hello, ${word}!`
+// List of social media platforms
+enum Platforms {
+  FACEBOOK = 'facebook',
+  INSTAGRAM = 'instagram',
+  PINTEREST = 'pinterest',
+  TIKTOK = 'tiktok',
+  TWITTER = 'twitter',
+  YOUTUBE = 'youtube'
 }
 
-// Interface specifies a contract to be satisfied by some implementation
-interface SomeInterface {
-  /**
-   * A callback function
-   */
-  callback: () => void
+// Data type for handle record
+type SocialMediaHandle = { [P in Platforms]?: string }
+
+const scrape = async (list: string[]) => await Promise.all(list.map(async (url: string) => {
+
+  let browser: Browser
+  let page: Page
 
   /**
-   * A timeout in milliseconds
+   * Launching the browser instance.
+   *
+   * https://pptr.dev/#?product=Puppeteer&version=v5.4.1&show=api-puppeteerlaunchoptions
    */
-  timeout: 1000 | 2000 | 3000 | 4000
-}
 
-/**
- * Function declares argument types inline (Note: function's own type inferred)
- *
- * @param callback A callback function
- * @param timeout Timeout in ms
- * @returns `NodeJS.Timeout` (command click to see definitions)
- */
-const delayWithInlineType = (callback: () => void, timeout: number) : NodeJS.Timeout => {
-  return setTimeout(callback, timeout)
-}
+  try {
+    // Try to launch the browser instance
+    // Headless access will be disallowed by some sites...
+    browser = await browserLaunch({
+      // headless: false
+    })
+  } catch {
+    // Exit on failure
+    return
+  }
 
-/**
- * Function asserts argument must satisfy the `SomeInterface` contract, returns
- * a promise just to see how the return type annotation should look...
- *
- * @param input A `SomeInterface`
- * @return `Promise<NodeJS.Timeout>`
- */
-const delayWithInterface = (input: SomeInterface) : Promise<NodeJS.Timeout> => {
-  const { callback, timeout } = input
+  /**
+   * Loading browser tabs.
+   *
+   * https://pptr.dev/#?product=Puppeteer&version=v5.4.1&show=api-browsernewpage
+   * https://pptr.dev/#?product=Puppeteer&version=v5.4.1&show=api-pagegotourl-options
+   */
 
-  return Promise.resolve(setTimeout(callback, timeout))
-}
+  // try {
+  //   // Retrieve the 'robots.txt'
+  //   page = await browser.newPage()
+  //   await page.goto(`${url}/robots.txt`)
+  //   // Here, we could parse the robots.txt to ensure we have
+  //   // permission to proceed with scraping data we are interested in
+  //   // but let's just pretend for now...
+  //   const _permissions = await page.content()
+  //   await page.close()
+  // } catch {
+  //   // Absorb any exception and continue
+  // }
 
-console.log(someData)
+  try {
+    // Open the home page
+    page = await browser.newPage()
+    await page.goto(url)
 
-console.log(hello())
-// This will fail compilation
-// console.log(hello({ name: 'Founders and Coders'}))
+    // Scroll to bottom to invoke lazy-loading content
+    const n = await page.evaluate(() => {
+      return Math.ceil(document.body.scrollHeight / visualViewport.height)
+    })
+    let i = 0
+    while (i <= n) {
+      await page.evaluate(() => window.scrollBy(0, visualViewport.height))
+      await page.waitForTimeout(100)
+      i++
+    }
+  } catch (e) {
+    // Exit if the page load times-out etc.
+    await browser.close()
+    return
+  }
 
-delayWithInlineType(() => console.log(hello('Moon')), 1000)
-delayWithInterface({ callback: () => console.log(hello('Typescript')), timeout: 2000 })
+  /**
+   * Evaluating JS in the page context.
+   *
+   * https://pptr.dev/#?product=Puppeteer&version=v5.4.1&show=api-pageevaluatepagefunction-args
+   */
 
+  // Retrieve the page title
+  const title: string = await page.evaluate(() => {
+    const element = document.querySelector('TITLE')
 
+    if (element instanceof HTMLTitleElement) {
+      return (element.textContent || '').trim()
+    }
+
+    throw new Error('Title element not found')
+  }).catch(() => '')
+
+  //  Retrieve the metadata description and keywords
+  const [ description, keywords ]: string[] = await Promise.all(
+    [ 'description', 'keywords' ].map(name => page.evaluate(n => {
+      const element = document.querySelector(`META[name="${n}" i]`)
+
+      if (element instanceof HTMLMetaElement) {
+        return (element.content || '').trim()
+      }
+
+      throw new Error('Meta element not found')
+    }, name).catch(() => ''))
+  )
+
+  // For each of `Platforms`, try to scrape corresponding handle for `url`
+  const links: SocialMediaHandle = await Promise.all(
+    Object.values(Platforms).map(async platform => {
+      const result: SocialMediaHandle = {}
+
+      const href = await page.evaluate(p => {
+        const element = document.querySelector(`A[href*="${p}.com" i]`)
+
+        if (element instanceof HTMLAnchorElement) {
+          return element.href
+        }
+
+        throw new Error(`Social media handle for ${p} not found`)
+      }, platform).catch(() => '')
+
+      result[platform] = href
+
+      return result
+    })
+  ).then(([first, ...rest]: SocialMediaHandle[]) => {
+    return Object.assign(first, ...rest)
+  })
+
+  // Close the browser instance
+  // await browser.close()
+
+  // Write out the data - could be serialised as JSON...
+  console.log({
+    title,
+    description,
+    keywords,
+    links
+  })
+
+}))
+
+;(async () => {
+  for (let i = 0; i < urls.length; i += 10) {
+    const batch: string[] = urls.slice(i, i + 10)
+
+    console.log('Starting Batch!!')
+    await scrape(batch)
+    console.log('Finishing Batch!!')
+  }
+})()
