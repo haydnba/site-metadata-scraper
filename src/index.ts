@@ -1,8 +1,8 @@
 import { Browser, Page, launch as browserLaunch } from 'puppeteer'
 import { data } from '../.snippets/urls.json'
 
-// Select just a small subset of the provided urls (should batch process...)
-const urls: string[] = data.map((url: string) => new URL(url).origin).slice(5, 15)
+// Process the urls (select subset for development...)
+const urls: string[] = data.map((url: string) => new URL(url).origin)//.slice(0, 10)
 
 // List of social media platforms
 enum Platforms {
@@ -31,6 +31,7 @@ const scrape = async (list: string[]) => await Promise.all(list.map(async (url: 
   try {
     // Try to launch the browser instance
     // Headless access will be disallowed by some sites...
+    // https://github.com/Python3WebSpider/WebDriverDetection
     browser = await browserLaunch({
       // headless: false
     })
@@ -45,19 +46,6 @@ const scrape = async (list: string[]) => await Promise.all(list.map(async (url: 
    * https://pptr.dev/#?product=Puppeteer&version=v5.4.1&show=api-browsernewpage
    * https://pptr.dev/#?product=Puppeteer&version=v5.4.1&show=api-pagegotourl-options
    */
-
-  // try {
-  //   // Retrieve the 'robots.txt'
-  //   page = await browser.newPage()
-  //   await page.goto(`${url}/robots.txt`)
-  //   // Here, we could parse the robots.txt to ensure we have
-  //   // permission to proceed with scraping data we are interested in
-  //   // but let's just pretend for now...
-  //   const _permissions = await page.content()
-  //   await page.close()
-  // } catch {
-  //   // Absorb any exception and continue
-  // }
 
   try {
     // Open the home page
@@ -146,6 +134,7 @@ const scrape = async (list: string[]) => await Promise.all(list.map(async (url: 
 
 }))
 
+// Execute the scraper on batches of provided urls
 ;(async () => {
   for (let i = 0; i < urls.length; i += 10) {
     const batch: string[] = urls.slice(i, i + 10)
