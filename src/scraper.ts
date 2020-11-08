@@ -1,3 +1,4 @@
+import { parse, ParsedDomain, ParseError } from 'psl'
 import { Browser, Page, launch as browserLaunch } from 'puppeteer'
 
 // List of social media platforms
@@ -14,6 +15,20 @@ enum Platforms {
 type SocialMediaHandle = { [P in Platforms]?: string }
 
 export default async (url: string) : Promise<void> => {
+
+  /**
+   * Analyse the url (export to module...)
+   *
+   * https://www.npmjs.com/package/psl
+   */
+
+  const { hostname } = new URL(url)
+  const parsed: ParsedDomain | ParseError = parse(hostname)
+
+  if (parsed.error) {
+    // There is something wrong with the url...
+    return
+  }
 
   let browser: Browser
   let page: Page
@@ -47,6 +62,9 @@ export default async (url: string) : Promise<void> => {
     // Open the home page
     page = await browser.newPage()
     await page.goto(url)
+
+    // // Set to desktop view
+    // await page.setViewport({ width: 1280, height: 720 })
 
     // Scroll to bottom to invoke lazy-loading content
     const n = await page.evaluate(() => {
@@ -99,15 +117,21 @@ export default async (url: string) : Promise<void> => {
     Object.values(Platforms).map(async platform => {
       const result: SocialMediaHandle = {}
 
-      const href = await page.evaluate(p => {
-        const element = document.querySelector(`A[href*="${p}.com" i]`)
+      const href = await page.evaluate((p, sld) => {
+        let element: HTMLAnchorElement | null = null
+
+        element = document.querySelector(`A[href*="${p}.com/${sld}" i]`)
+
+        if (!element) {
+          element = document.querySelector(`A[href*="${p}.com" i]`)
+        }
 
         if (element instanceof HTMLAnchorElement) {
           return element.href
         }
 
         throw new Error(`Social media handle for ${p} not found`)
-      }, platform).catch(() => '')
+      }, platform, parsed.sld).catch(() => '')
 
       result[platform] = href
 
@@ -122,6 +146,8 @@ export default async (url: string) : Promise<void> => {
 
   // Write out the data - could be serialised as JSON...
   console.log({
+    domain: parsed.domain,
+    url,
     title,
     description,
     keywords,

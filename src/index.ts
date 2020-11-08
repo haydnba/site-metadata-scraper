@@ -2,7 +2,7 @@ import { data } from '../.snippets/urls.json'
 import scrape from './scraper'
 
 // Process the urls (select subset for development...)
-const urls: string[] = data.map((url: string) => new URL(url).origin).slice(0, 30)
+const urls: string[] = data.slice(0, 30)
 
 // Execute the scraper on batches of provided urls
 ;(async () => {
