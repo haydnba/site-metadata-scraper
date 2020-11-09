@@ -1,4 +1,4 @@
-import { parse, ParsedDomain, ParseError } from 'psl'
+import parse from './url'
 import { Browser, Page, launch as browserLaunch } from 'puppeteer'
 
 // List of social media platforms
@@ -17,27 +17,30 @@ type SocialMediaHandle = { [P in Platforms]?: string }
 export default async (url: string) : Promise<void> => {
 
   /**
-   * Analyse the url (export to module...)
+   * Validate and analyse the url.
    *
    * https://www.npmjs.com/package/psl
    */
 
-  const { hostname } = new URL(url)
-  const parsed: ParsedDomain | ParseError = parse(hostname)
+  const urlData = parse(url)
 
-  if (parsed.error) {
-    // There is something wrong with the url...
+  if (!urlData) {
+    // Exit if there is invalid url
     return
   }
 
-  let browser: Browser
-  let page: Page
+  const { domain, sld } = urlData
 
   /**
-   * Launching the browser instance.
+   * Launch the browser instance and load page tabs.
    *
    * https://pptr.dev/#?product=Puppeteer&version=v5.4.1&show=api-puppeteerlaunchoptions
+   * https://pptr.dev/#?product=Puppeteer&version=v5.4.1&show=api-browsernewpage
+   * https://pptr.dev/#?product=Puppeteer&version=v5.4.1&show=api-pagegotourl-options
    */
+
+  let browser: Browser
+  let page: Page
 
   try {
     // Try to launch the browser instance
@@ -50,13 +53,6 @@ export default async (url: string) : Promise<void> => {
     // Exit on failure
     return
   }
-
-  /**
-   * Loading browser tabs.
-   *
-   * https://pptr.dev/#?product=Puppeteer&version=v5.4.1&show=api-browsernewpage
-   * https://pptr.dev/#?product=Puppeteer&version=v5.4.1&show=api-pagegotourl-options
-   */
 
   try {
     // Open the home page
@@ -89,6 +85,17 @@ export default async (url: string) : Promise<void> => {
    */
 
   // Retrieve the page title
+  const lang: string = await page.evaluate(() => {
+    const element = document.querySelector('HTML')
+
+    if (element instanceof HTMLHtmlElement) {
+      return (element.lang || '').trim()
+    }
+
+    throw new Error('Html element not found')
+  }).catch(() => '')
+
+  // Retrieve the page title
   const title: string = await page.evaluate(() => {
     const element = document.querySelector('TITLE')
 
@@ -102,7 +109,9 @@ export default async (url: string) : Promise<void> => {
   //  Retrieve the metadata description and keywords
   const [ description, keywords ]: string[] = await Promise.all(
     [ 'description', 'keywords' ].map(name => page.evaluate(n => {
-      const element = document.querySelector(`META[name="${n}" i]`)
+      const element = document.querySelector(
+        `META[name="${n}" i], META[property*="${n}" i]`
+      )
 
       if (element instanceof HTMLMetaElement) {
         return (element.content || '').trim()
@@ -117,10 +126,10 @@ export default async (url: string) : Promise<void> => {
     Object.values(Platforms).map(async platform => {
       const result: SocialMediaHandle = {}
 
-      const href = await page.evaluate((p, sld) => {
+      const href = await page.evaluate((p, d) => {
         let element: HTMLAnchorElement | null = null
 
-        element = document.querySelector(`A[href*="${p}.com/${sld}" i]`)
+        element = document.querySelector(`A[href*="${p}.com/${d}" i]`)
 
         if (!element) {
           element = document.querySelector(`A[href*="${p}.com" i]`)
@@ -131,7 +140,7 @@ export default async (url: string) : Promise<void> => {
         }
 
         throw new Error(`Social media handle for ${p} not found`)
-      }, platform, parsed.sld).catch(() => '')
+      }, platform, sld).catch(() => '')
 
       result[platform] = href
 
@@ -142,12 +151,13 @@ export default async (url: string) : Promise<void> => {
   })
 
   // Close the browser instance
-  await browser.close()
+  // await browser.close()
 
   // Write out the data - could be serialised as JSON...
   console.log({
-    domain: parsed.domain,
+    domain,
     url,
+    lang,
     title,
     description,
     keywords,
