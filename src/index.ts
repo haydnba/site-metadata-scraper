@@ -1,18 +1,44 @@
-import { data } from '../.snippets/urls.json'
+import read from './read'
 import scrape from './scraper'
+import { construct } from './url'
 
-// Process the urls (select subset for development...)
-const urls: string[] = data.slice(22, 23)
+interface IndexItem {
+  id: number
+  url: string
+  merchant: {
+    [k: string] :  string
+  }
+}
+
+const { INPUT_PATH } = process.env
+const { BATCH_SIZE } = process.env
 
 // Execute the scraper on batches of provided urls
 ;(async () => {
+  // Contain the result
+  const result: Array<{ [k: string]: string}> = []
+
+  // Get the input
+  const urls: string[] = await read(INPUT_PATH || '')
+    .then(data => (data as IndexItem[]).map(d => construct(d.url)))
+    .catch(() => [])
+
+  // Unslice for prod...
+  const list: string[] = urls.slice(0, 10)
+
+  // Iterate on the input
   let i = 0
-  while (i < urls.length) {
-    const batch: string[] = urls.slice(i, i + 10)
+  const partition = Number(BATCH_SIZE) || 5
+  while (i < list.length) {
+    const batch: string[] = list.slice(i, i + partition)
 
-    console.log('Batch >>>')
-    await Promise.all(batch.map(scrape))
+    console.info(`<<< Process Batch of ${partition} >>>`)
+    const data = await Promise.all(batch.map(scrape))
 
-    i += 10
+    result.push(...data)
+
+    i += partition
   }
+
+  console.log(result)
 })()

@@ -1,4 +1,3 @@
-// https://www.staging-typescript.org/tsconfig
 {
   "compilerOptions": {
     "baseUrl": "./src",

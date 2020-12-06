@@ -1,15 +1,16 @@
 {
-  "name": "typescript-starter-fac-odp",
+  "name": "site-metadata-scraper",
   "version": "1.0.0",
-  "description": "Basic typescript project template",
+  "description": "Scrape site description, keywords, title, lang...",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "npx eslint . --ext .js,.ts",
     "build": "npx tsc",
-    "start": "npm run build && node dist/src/index.js"
+    "start": "npm run build && node dist/index.js"
   },
-  "author": "haydn.appleby@joingsg.com",
+  "author": "haydnba@pm.me",
+  "repository": "github:haydnba/site-metadata-scraper",
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^14.14.6",

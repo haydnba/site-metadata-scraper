@@ -1,5 +1,5 @@
-import parse from './url'
-import { Browser, Page, launch as browserLaunch } from 'puppeteer'
+import { decompose } from './url'
+import { Browser, launch, Page } from 'puppeteer'
 
 // List of social media platforms
 enum Platforms {
@@ -14,29 +14,31 @@ enum Platforms {
 // Data type for handle record
 type SocialMediaHandle = { [P in Platforms]?: string }
 
-export default async (url: string) : Promise<void> => {
+/**
+ * Launches a browser instance and opens a page to the validated url input.
+ * Try to scrape `html.lang`, `document.title`, `meta.keywords & .description`,
+ * any `anchors` pointing to social media `Platforms`.
+ *
+ * Never throw an error so as not to invalidate the whole `Promise.all` batch.
+ */
+export default async (url: string) : Promise<{ [k: string]: string }> => {
 
   /**
    * Validate and analyse the url.
-   *
-   * https://www.npmjs.com/package/psl
    */
 
-  const urlData = parse(url)
+  const urlData = decompose(url)
 
   if (!urlData) {
     // Exit if there is invalid url
-    return
+    return {
+      error: url,
+      reason: 'Input url invalid'
+    }
   }
-
-  const { domain, sld } = urlData
 
   /**
    * Launch the browser instance and load page tabs.
-   *
-   * https://pptr.dev/#?product=Puppeteer&version=v5.4.1&show=api-puppeteerlaunchoptions
-   * https://pptr.dev/#?product=Puppeteer&version=v5.4.1&show=api-browsernewpage
-   * https://pptr.dev/#?product=Puppeteer&version=v5.4.1&show=api-pagegotourl-options
    */
 
   let browser: Browser
@@ -46,21 +48,21 @@ export default async (url: string) : Promise<void> => {
     // Try to launch the browser instance
     // Headless access will be disallowed by some sites...
     // https://github.com/Python3WebSpider/WebDriverDetection
-    browser = await browserLaunch({
-      // headless: false
+    browser = await launch({
+      headless: false
     })
   } catch {
     // Exit on failure
-    return
+    return {
+      error: url,
+      reason: 'Failed to launch browser instance'
+    }
   }
 
   try {
     // Open the home page
     page = await browser.newPage()
     await page.goto(url)
-
-    // // Set to desktop view
-    // await page.setViewport({ width: 1280, height: 720 })
 
     // Scroll to bottom to invoke lazy-loading content
     const n = await page.evaluate(() => {
@@ -75,16 +77,15 @@ export default async (url: string) : Promise<void> => {
   } catch (e) {
     // Exit if the page load times-out etc.
     await browser.close()
-    return
+    return {
+      error: url,
+      reason: e.message
+    }
   }
 
   /**
-   * Evaluating JS in the page context.
-   *
-   * https://pptr.dev/#?product=Puppeteer&version=v5.4.1&show=api-pageevaluatepagefunction-args
+   * Retrieve the document language.
    */
-
-  // Retrieve the page title
   const lang: string = await page.evaluate(() => {
     const element = document.querySelector('HTML')
 
@@ -95,7 +96,9 @@ export default async (url: string) : Promise<void> => {
     throw new Error('Html element not found')
   }).catch(() => '')
 
-  // Retrieve the page title
+  /**
+   * Retrieve the page title.
+   */
   const title: string = await page.evaluate(() => {
     const element = document.querySelector('TITLE')
 
@@ -106,7 +109,9 @@ export default async (url: string) : Promise<void> => {
     throw new Error('Title element not found')
   }).catch(() => '')
 
-  //  Retrieve the metadata description and keywords
+  /**
+   * Retrieve the metadata description and keywords.
+   */
   const [ description, keywords ]: string[] = await Promise.all(
     [ 'description', 'keywords' ].map(name => page.evaluate(n => {
       const element = document.querySelector(
@@ -121,7 +126,9 @@ export default async (url: string) : Promise<void> => {
     }, name).catch(() => ''))
   )
 
-  // For each of `Platforms`, try to scrape corresponding handle for `url`
+  /**
+   * For each of `Platforms`, try to scrape corresponding handle for `url`.
+   */
   const links: SocialMediaHandle = await Promise.all(
     Object.values(Platforms).map(async platform => {
       const result: SocialMediaHandle = {}
@@ -140,7 +147,7 @@ export default async (url: string) : Promise<void> => {
         }
 
         throw new Error(`Social media handle for ${p} not found`)
-      }, platform, sld).catch(() => '')
+      }, platform, urlData.sld).catch(() => '')
 
       result[platform] = href
 
@@ -151,18 +158,15 @@ export default async (url: string) : Promise<void> => {
   })
 
   // Close the browser instance
-  // await browser.close()
+  await browser.close()
 
-  // Write out the data - could be serialised as JSON...
-  console.log({
-    domain,
+  // Write out the data
+  return {
     url,
     lang,
     title,
-    description,
     keywords,
-    links
-  })
-
-  return
+    description,
+    socials: JSON.stringify(links)
+  }
 }
