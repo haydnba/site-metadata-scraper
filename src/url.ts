@@ -2,10 +2,21 @@
 import { parse, ParsedDomain, ParseError } from 'psl'
 
 /**
- * Safely construct an origin from more-or-less partial hostname.
+ * Safely construct an origin from host- or domain-name if required.
  */
-const construct = (input: string) : string => {
+const compose = (input: string) : string => {
+  let urlObject: URL
   let domainData: ParsedDomain | ParseError
+
+  try {
+    // Test validity of input
+    urlObject = new URL(input)
+
+    // Return full origin if valid
+    return urlObject.origin
+  } catch {
+    // do nothing
+  }
 
   try {
     // Try to parse the input
@@ -18,6 +29,7 @@ const construct = (input: string) : string => {
 
     const { domain, subdomain } = domainData
 
+    // Append protocol and subdomain if required
     return `https://${subdomain || 'www'}.${domain}`
   } catch {
     // The input could not be parsed
@@ -29,7 +41,6 @@ const construct = (input: string) : string => {
  * Safely decompose a valid url to its elements.
  */
 const decompose = (input: string) : ParsedDomain & URL | undefined => {
-
   let urlObject: URL
   let domainData: ParsedDomain | ParseError
 
@@ -55,6 +66,6 @@ const decompose = (input: string) : ParsedDomain & URL | undefined => {
 }
 
 export {
-  construct,
+  compose,
   decompose
 }
