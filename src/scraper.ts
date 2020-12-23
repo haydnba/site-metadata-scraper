@@ -1,3 +1,4 @@
+import { scroll } from './utils'
 import { decompose } from './url'
 import { Browser, launch, Page } from 'puppeteer'
 
@@ -63,17 +64,7 @@ export default async (url: string) : Promise<{ [k: string]: string }> => {
     // Open the home page
     page = await browser.newPage()
     await page.goto(url)
-
-    // Scroll to bottom to invoke lazy-loading content
-    const n = await page.evaluate(() => {
-      return Math.ceil(document.body.scrollHeight / visualViewport.height)
-    })
-    let i = 0
-    while (i <= n) {
-      await page.evaluate(() => window.scrollBy(0, visualViewport.height))
-      await page.waitForTimeout(100)
-      i++
-    }
+    await scroll(page)
   } catch (e) {
     // Exit if the page load times-out etc.
     await browser.close()

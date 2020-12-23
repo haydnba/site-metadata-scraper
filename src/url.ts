@@ -14,9 +14,7 @@ const compose = (input: string) : string => {
 
     // Return full origin if valid
     return urlObject.origin
-  } catch {
-    // do nothing
-  }
+  } catch { null }
 
   try {
     // Try to parse the input
